@@ -49,37 +49,49 @@
       </div>
     </section>
 
-    <!-- ============ SCENE 1: THE FRONT DOOR ============ -->
-    <section class="scene" data-scene="door">
-      <div class="scene-inner">
-        <svg class="illustration" viewBox="0 0 220 260" aria-hidden="true">
-          <rect x="30" y="40" width="160" height="210" rx="4" fill="none" stroke="var(--line)" stroke-width="2"/>
-          <rect x="45" y="60" width="130" height="180" rx="2" fill="var(--door-fill)" stroke="var(--line)" stroke-width="2"/>
-          <circle cx="150" cy="150" r="4.5" fill="var(--accent-warm)"/>
-          <path d="M45 60 L20 250 M175 60 L200 250" stroke="var(--line)" stroke-width="2" fill="none"/>
-          <path d="M20 250 L200 250" stroke="var(--line)" stroke-width="2"/>
+    <!-- ============ SCENE 1: THE SPRINT GRAPH ============ -->
+    <section class="scene" data-scene="graph">
+      <div class="scene-inner scene-inner-wide">
+        <svg class="illustration illustration-small" viewBox="0 0 200 120" aria-hidden="true">
+          <path d="M12 92 C 40 92, 40 40, 68 40 C 96 40, 96 78, 124 78 C 152 78, 152 24, 188 24"
+                fill="none" stroke="var(--accent-warm)" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+          <circle cx="12" cy="92" r="4" fill="var(--accent-warm)"/>
+          <circle cx="188" cy="24" r="4" fill="var(--accent-warm)"/>
         </svg>
-        <p class="story-text" data-typing>คุณเพิ่งเดินทางกลับมาถึงหน้าบ้าน หลังจากที่ออกไปข้างนอกมาทั้งวัน<br>มือหนึ่งถือกุญแจ อีกมือยังไม่ได้วางกระเป๋าลงเลย<br>ยังไม่ทันเปิดประตู คุณกลับหยุดยืนอยู่ตรงนั้นสักครู่</p>
-        <h2 class="question">ถ้าจะให้เลือกความรู้สึกหนึ่งเดียวแทนช่วงเวลาที่ผ่านมา จะเป็นความรู้สึกแบบไหน</h2>
+        <p class="story-text" data-typing>ทุกการเดินทาง ไม่ได้ราบเรียบเสมอไป<br>บางวันเหมือนเดินขึ้นเขา บางวันเหมือนหยุดอยู่กับที่<br>บางวันทุกอย่างกลับง่ายกว่าที่คิด<br>ไม่มีเส้นทางไหนถูกหรือผิด เพียงแค่ลองวาดเส้นทางที่คุณรู้สึกว่าได้เดินผ่านมา</p>
+        <h2 class="question">ถ้ามองย้อนกลับไป เส้นกราฟของ Sprint นี้จะเป็นอย่างไร</h2>
 
-        <div class="emoji-picker" id="emojiPicker" role="group" aria-label="เลือกความรู้สึก">
-          <button type="button" class="emoji-btn" data-emoji="😊">😊</button>
-          <button type="button" class="emoji-btn" data-emoji="😌">😌</button>
-          <button type="button" class="emoji-btn" data-emoji="😩">😩</button>
-          <button type="button" class="emoji-btn" data-emoji="😤">😤</button>
-          <button type="button" class="emoji-btn" data-emoji="😴">😴</button>
-          <button type="button" class="emoji-btn" data-emoji="🥳">🥳</button>
-          <button type="button" class="emoji-btn" data-emoji="😰">😰</button>
-          <button type="button" class="emoji-btn" data-emoji="🙂">🙂</button>
-          <button type="button" class="emoji-btn" data-emoji="😔">😔</button>
-          <button type="button" class="emoji-btn" data-emoji="🤯">🤯</button>
+        <div class="graph-panel">
+          <div class="graph-y-labels" aria-hidden="true">
+            <span>😊<br>Energized</span>
+            <span>😌<br>Calm</span>
+            <span>😫<br>Exhausted</span>
+          </div>
+          <div class="graph-canvas-col">
+            <canvas
+              id="sprintGraphCanvas"
+              class="graph-canvas"
+              aria-label="วาดกราฟความรู้สึกของคุณตลอดเส้นทางนี้ ด้วยเมาส์หรือนิ้ว"
+              role="img"
+            ></canvas>
+            <div class="graph-x-labels" aria-hidden="true">
+              <span>เริ่มต้น</span>
+              <span>จบ</span>
+            </div>
+          </div>
         </div>
 
-        <input type="text" class="text-input" id="doorSentence" maxlength="140" placeholder="ลองเล่าให้ฟังเป็นประโยคเดียวก็ได้..." data-field="doorSentence" />
+        <div class="graph-controls">
+          <button type="button" class="btn-chip" id="graphUndoBtn">↶ ย้อนขีด</button>
+          <button type="button" class="btn-chip" id="graphClearBtn">ล้างใหม่</button>
+          <button type="button" class="btn-chip" id="graphReplayBtn" hidden>▶ ดูเส้นทางอีกครั้ง</button>
+        </div>
+
+        <p class="graph-finish-message" id="graphFinishMessage" hidden>ทุกเส้นที่คุณวาด คือเรื่องราวที่คุณผ่านมา</p>
 
         <div class="scene-nav">
           <button class="btn btn-ghost" data-nav="back">ย้อนกลับ</button>
-          <button class="btn btn-primary" data-nav="next">ไปต่อ</button>
+          <button class="btn btn-primary" data-nav="next" id="saveJourneyBtn">บันทึกเส้นทาง</button>
         </div>
       </div>
     </section>

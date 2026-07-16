@@ -18,8 +18,6 @@
   // ---------------------------------------------------------------------
   const GOOGLE_FORM_ACTION_URL = '';
   const GOOGLE_FORM_ENTRY_IDS = {
-    doorEmoji: '',
-    doorSentence: '',
     backpackWeight: '',
     windowEnergy: '',
     mirrorPride: '',
@@ -33,17 +31,15 @@
 
   /** Ordered list of scenes. "landing" and "ending" bookend the 8 story scenes. */
   const SCENE_ORDER = [
-    'landing', 'door', 'backpack', 'window', 'mirror',
+    'landing', 'graph', 'backpack', 'window', 'mirror',
     'chair', 'corner', 'letter', 'lightsout', 'ending',
   ];
 
   /** Scenes that count toward the footstep progress trail. */
-  const JOURNEY_SCENES = SCENE_ORDER.slice(1, -1); // door..lightsout
+  const JOURNEY_SCENES = SCENE_ORDER.slice(1, -1); // graph..lightsout
 
   /** Maps each field to the scene it belongs to and its label in the summary/export. */
   const FIELDS = [
-    { key: 'doorEmoji', scene: 'door', label: 'ความรู้สึกหน้าประตูบ้าน' },
-    { key: 'doorSentence', scene: 'door', label: 'เล่าเป็นประโยคเดียว' },
     { key: 'backpackWeight', scene: 'backpack', label: 'สิ่งที่ทำให้รู้สึกหนักอึ้ง' },
     { key: 'windowEnergy', scene: 'window', label: 'สิ่งที่ช่วยให้หายใจสะดวกขึ้น' },
     { key: 'mirrorPride', scene: 'mirror', label: 'เรื่องที่ภูมิใจในตัวเอง' },
@@ -151,7 +147,7 @@
   }
 
   function focusFirstField(sceneEl) {
-    const field = sceneEl.querySelector('.text-input, .textarea');
+    const field = sceneEl.querySelector('.textarea');
     if (field && window.innerWidth > 640) {
       // Gentle focus only on larger screens, to avoid popping the mobile keyboard unexpectedly.
       setTimeout(() => field.focus({ preventScroll: true }), 400);
@@ -166,7 +162,7 @@
 
   /** Thai scene titles, shown as the footstep dots' hover tooltip. */
   const SCENE_TITLES = {
-    door: 'ประตูบ้าน',
+    graph: 'เส้นทางที่ผ่านมา',
     backpack: 'เป้ใบนั้น',
     window: 'หน้าต่างบานนั้น',
     mirror: 'หน้ากระจก',
@@ -283,11 +279,6 @@
       const el = document.querySelector(`[data-field="${key}"]`);
       if (el) el.value = value;
     });
-
-    if (answers.doorEmoji) {
-      const emojiBtn = document.querySelector(`.emoji-btn[data-emoji="${answers.doorEmoji}"]`);
-      if (emojiBtn) emojiBtn.classList.add('selected');
-    }
   }
 
   function bindFieldAutosave() {
@@ -299,25 +290,16 @@
     });
   }
 
-  function bindEmojiPicker() {
-    const picker = document.getElementById('emojiPicker');
-    picker.addEventListener('click', (e) => {
-      const btn = e.target.closest('.emoji-btn');
-      if (!btn) return;
-
-      picker.querySelectorAll('.emoji-btn').forEach((b) => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      answers.doorEmoji = btn.dataset.emoji;
-      saveAnswers();
-    });
-  }
-
   // ---------------------------------------------------------------------
   // Navigation buttons + keyboard
   // ---------------------------------------------------------------------
 
   function bindNavButtons() {
     document.querySelectorAll('[data-nav]').forEach((btn) => {
+      // The sprint-graph scene's "Save Journey" button needs to snapshot the
+      // drawing before advancing, so it's wired separately in bindSprintGraph().
+      if (btn.id === 'saveJourneyBtn') return;
+
       btn.addEventListener('click', () => {
         if (btn.dataset.nav === 'next') nextScene();
         else prevScene();
@@ -357,6 +339,358 @@
   }
 
   // ---------------------------------------------------------------------
+  // Sprint graph — a freehand journal-style drawing of the sprint's
+  // emotional arc. Strokes are stored as normalized (0–1) points so they
+  // redraw correctly at any canvas size (resize, restore-on-load, replay).
+  // ---------------------------------------------------------------------
+
+  const GRAPH_STROKE_WIDTH = 4;
+  const GRAPH_STROKE_COLOR = 'rgba(240, 185, 128, 0.92)';
+  const GRAPH_GLOW_COLOR = 'rgba(240, 185, 128, 0.55)';
+  const GRAPH_GRID_STEP = 28;
+
+  let graphCanvas = null;
+  let graphCtx = null;
+  let graphLogicalWidth = 0;
+  let graphLogicalHeight = 0;
+  let graphStrokes = []; // array of strokes; each stroke: array of {x, y} normalized 0–1
+  let graphCurrentStrokeRaw = []; // in-progress stroke, in CSS-pixel coordinates
+  let graphIsDrawing = false;
+  let graphResizeTimer = null;
+
+  function getCanvasPoint(e) {
+    const rect = graphCanvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  function normalizePoint(p) {
+    return { x: p.x / graphLogicalWidth, y: p.y / graphLogicalHeight };
+  }
+
+  function denormalizeStroke(stroke) {
+    return stroke.map((p) => ({ x: p.x * graphLogicalWidth, y: p.y * graphLogicalHeight }));
+  }
+
+  function applyGraphStrokeStyle() {
+    graphCtx.lineWidth = GRAPH_STROKE_WIDTH;
+    graphCtx.lineCap = 'round';
+    graphCtx.lineJoin = 'round';
+    graphCtx.strokeStyle = GRAPH_STROKE_COLOR;
+    graphCtx.shadowColor = GRAPH_GLOW_COLOR;
+    graphCtx.shadowBlur = 8;
+  }
+
+  function drawGraphGrid() {
+    graphCtx.clearRect(0, 0, graphLogicalWidth, graphLogicalHeight);
+    graphCtx.save();
+    graphCtx.shadowBlur = 0;
+
+    graphCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    graphCtx.lineWidth = 1;
+    for (let x = GRAPH_GRID_STEP; x < graphLogicalWidth; x += GRAPH_GRID_STEP) {
+      graphCtx.beginPath();
+      graphCtx.moveTo(x, 0);
+      graphCtx.lineTo(x, graphLogicalHeight);
+      graphCtx.stroke();
+    }
+    for (let y = GRAPH_GRID_STEP; y < graphLogicalHeight; y += GRAPH_GRID_STEP) {
+      graphCtx.beginPath();
+      graphCtx.moveTo(0, y);
+      graphCtx.lineTo(graphLogicalWidth, y);
+      graphCtx.stroke();
+    }
+
+    // Two dashed guide lines marking the Energized / Calm / Exhausted thirds.
+    graphCtx.strokeStyle = 'rgba(240, 185, 128, 0.14)';
+    graphCtx.setLineDash([4, 5]);
+    [graphLogicalHeight / 3, (graphLogicalHeight / 3) * 2].forEach((y) => {
+      graphCtx.beginPath();
+      graphCtx.moveTo(0, y);
+      graphCtx.lineTo(graphLogicalWidth, y);
+      graphCtx.stroke();
+    });
+    graphCtx.setLineDash([]);
+
+    graphCtx.restore();
+  }
+
+  /** Renders one complete stroke as a single smooth curve through its points. */
+  function drawFullStroke(pointsCss) {
+    if (pointsCss.length === 0) return;
+    if (pointsCss.length === 1) {
+      graphCtx.beginPath();
+      graphCtx.arc(pointsCss[0].x, pointsCss[0].y, GRAPH_STROKE_WIDTH / 2, 0, Math.PI * 2);
+      graphCtx.fillStyle = GRAPH_STROKE_COLOR;
+      graphCtx.fill();
+      return;
+    }
+
+    graphCtx.beginPath();
+    graphCtx.moveTo(pointsCss[0].x, pointsCss[0].y);
+    for (let i = 1; i < pointsCss.length - 1; i += 1) {
+      const midX = (pointsCss[i].x + pointsCss[i + 1].x) / 2;
+      const midY = (pointsCss[i].y + pointsCss[i + 1].y) / 2;
+      graphCtx.quadraticCurveTo(pointsCss[i].x, pointsCss[i].y, midX, midY);
+    }
+    graphCtx.lineTo(pointsCss[pointsCss.length - 1].x, pointsCss[pointsCss.length - 1].y);
+    graphCtx.stroke();
+  }
+
+  /** Draws just the newest segment of the stroke currently being drawn, for a live feel. */
+  function drawLiveSegment() {
+    const pts = graphCurrentStrokeRaw;
+    if (pts.length < 2) return;
+
+    if (pts.length === 2) {
+      graphCtx.beginPath();
+      graphCtx.moveTo(pts[0].x, pts[0].y);
+      graphCtx.lineTo(pts[1].x, pts[1].y);
+      graphCtx.stroke();
+      return;
+    }
+
+    const len = pts.length;
+    const p0 = pts[len - 3];
+    const p1 = pts[len - 2];
+    const p2 = pts[len - 1];
+    const mid1 = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+    const mid2 = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+    graphCtx.beginPath();
+    graphCtx.moveTo(mid1.x, mid1.y);
+    graphCtx.quadraticCurveTo(p1.x, p1.y, mid2.x, mid2.y);
+    graphCtx.stroke();
+  }
+
+  function redrawAllGraphStrokes() {
+    drawGraphGrid();
+    applyGraphStrokeStyle();
+    graphStrokes.forEach((stroke) => drawFullStroke(denormalizeStroke(stroke)));
+  }
+
+  function resizeGraphCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = graphCanvas.getBoundingClientRect();
+    graphLogicalWidth = rect.width;
+    graphLogicalHeight = rect.height;
+
+    graphCanvas.width = Math.round(rect.width * dpr);
+    graphCanvas.height = Math.round(rect.height * dpr);
+    graphCtx = graphCanvas.getContext('2d');
+    graphCtx.scale(dpr, dpr);
+
+    redrawAllGraphStrokes();
+  }
+
+  function updateGraphUIState() {
+    const hasStrokes = graphStrokes.length > 0;
+    const message = document.getElementById('graphFinishMessage');
+    const replayBtn = document.getElementById('graphReplayBtn');
+    if (message) message.hidden = !hasStrokes;
+    if (replayBtn) replayBtn.hidden = !hasStrokes;
+  }
+
+  function persistGraphSnapshot() {
+    if (graphStrokes.length === 0) {
+      delete answers.sprintGraphPoints;
+      delete answers.sprintGraphImage;
+    } else {
+      answers.sprintGraphPoints = graphStrokes;
+      answers.sprintGraphImage = graphCanvas.toDataURL('image/png');
+    }
+    saveAnswers();
+  }
+
+  function onGraphPointerDown(e) {
+    e.preventDefault();
+    graphCanvas.setPointerCapture(e.pointerId);
+    graphIsDrawing = true;
+    graphCurrentStrokeRaw = [getCanvasPoint(e)];
+    applyGraphStrokeStyle();
+    const message = document.getElementById('graphFinishMessage');
+    if (message) message.hidden = true;
+  }
+
+  function onGraphPointerMove(e) {
+    if (!graphIsDrawing) return;
+    e.preventDefault();
+    graphCurrentStrokeRaw.push(getCanvasPoint(e));
+    drawLiveSegment();
+  }
+
+  function onGraphPointerUp() {
+    if (!graphIsDrawing) return;
+    graphIsDrawing = false;
+    if (graphCurrentStrokeRaw.length > 0) {
+      graphStrokes.push(graphCurrentStrokeRaw.map(normalizePoint));
+      persistGraphSnapshot();
+      updateGraphUIState();
+    }
+    graphCurrentStrokeRaw = [];
+  }
+
+  function undoGraphStroke() {
+    if (graphStrokes.length === 0) return;
+    graphStrokes.pop();
+    redrawAllGraphStrokes();
+    persistGraphSnapshot();
+    updateGraphUIState();
+  }
+
+  function resetGraphCanvas() {
+    graphStrokes = [];
+    if (graphCtx) redrawAllGraphStrokes();
+    persistGraphSnapshot();
+    updateGraphUIState();
+  }
+
+  /** Replays the saved strokes by re-drawing their points progressively — no video, just the same data. */
+  function replayGraphDrawing() {
+    if (graphStrokes.length === 0) return;
+    const replayBtn = document.getElementById('graphReplayBtn');
+    replayBtn.disabled = true;
+
+    const steps = [];
+    graphStrokes.forEach((stroke, strokeIndex) => {
+      denormalizeStroke(stroke).forEach((point) => steps.push({ point, strokeIndex }));
+    });
+
+    const drawnByStroke = graphStrokes.map(() => []);
+    const pointsPerFrame = Math.max(1, Math.ceil(steps.length / 180)); // ~3s total regardless of point count
+    let i = 0;
+
+    function frame() {
+      const frameEnd = Math.min(i + pointsPerFrame, steps.length);
+      for (; i < frameEnd; i += 1) {
+        drawnByStroke[steps[i].strokeIndex].push(steps[i].point);
+      }
+
+      drawGraphGrid();
+      applyGraphStrokeStyle();
+      drawnByStroke.forEach((pts) => drawFullStroke(pts));
+
+      if (i < steps.length) {
+        requestAnimationFrame(frame);
+      } else {
+        replayBtn.disabled = false;
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function triggerDownload(href, filename) {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function copyImageToClipboard(dataUrl) {
+    const blob = await (await fetch(dataUrl)).blob();
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+  }
+
+  function downloadGraphMarkdown(dataUrl) {
+    const date = new Date().toLocaleDateString('th-TH-u-ca-gregory', { year: 'numeric', month: 'long', day: 'numeric' });
+    const md = `# เส้นทางของฉัน\n\n_${date}_\n\n![เส้นทางที่วาดไว้](${dataUrl})\n`;
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    triggerDownload(url, 'sprint-graph.md');
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function buildGraphSummaryItem() {
+    const item = document.createElement('div');
+    item.className = 'summary-item';
+    const h3 = document.createElement('h3');
+    h3.textContent = 'เส้นทางที่คุณวาดไว้';
+    item.appendChild(h3);
+
+    const dataUrl = answers.sprintGraphImage;
+    if (!dataUrl) {
+      const p = document.createElement('p');
+      p.textContent = 'ครั้งนี้ขอเงียบไว้ก่อนนะ';
+      p.classList.add('empty-state');
+      item.appendChild(p);
+      return item;
+    }
+
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.alt = 'เส้นกราฟความรู้สึกที่คุณวาดไว้';
+    img.className = 'summary-graph-image';
+    item.appendChild(img);
+
+    const actions = document.createElement('div');
+    actions.className = 'summary-graph-actions';
+
+    const downloadPngBtn = document.createElement('button');
+    downloadPngBtn.type = 'button';
+    downloadPngBtn.className = 'btn-chip';
+    downloadPngBtn.textContent = 'ดาวน์โหลด PNG';
+    downloadPngBtn.addEventListener('click', () => {
+      triggerDownload(dataUrl, 'sprint-graph.png');
+      showCopyFeedback('ดาวน์โหลดรูปภาพแล้ว');
+    });
+
+    const copyImageBtn = document.createElement('button');
+    copyImageBtn.type = 'button';
+    copyImageBtn.className = 'btn-chip';
+    copyImageBtn.textContent = 'คัดลอกรูปภาพ';
+    copyImageBtn.addEventListener('click', async () => {
+      try {
+        await copyImageToClipboard(dataUrl);
+        showCopyFeedback('คัดลอกรูปภาพแล้ว');
+      } catch (err) {
+        showCopyFeedback('คัดลอกไม่ได้ในเบราว์เซอร์นี้');
+      }
+    });
+
+    const downloadMdBtn = document.createElement('button');
+    downloadMdBtn.type = 'button';
+    downloadMdBtn.className = 'btn-chip';
+    downloadMdBtn.textContent = 'ดาวน์โหลด Markdown';
+    downloadMdBtn.addEventListener('click', () => {
+      downloadGraphMarkdown(dataUrl);
+      showCopyFeedback('ดาวน์โหลด Markdown แล้ว');
+    });
+
+    actions.append(downloadPngBtn, copyImageBtn, downloadMdBtn);
+    item.appendChild(actions);
+    return item;
+  }
+
+  function bindSprintGraph() {
+    graphCanvas = document.getElementById('sprintGraphCanvas');
+    if (!graphCanvas) return;
+
+    graphStrokes = answers.sprintGraphPoints || [];
+
+    graphCanvas.addEventListener('pointerdown', onGraphPointerDown);
+    graphCanvas.addEventListener('pointermove', onGraphPointerMove);
+    graphCanvas.addEventListener('pointerup', onGraphPointerUp);
+    graphCanvas.addEventListener('pointercancel', onGraphPointerUp);
+
+    window.addEventListener('resize', () => {
+      clearTimeout(graphResizeTimer);
+      graphResizeTimer = setTimeout(resizeGraphCanvas, 200);
+    });
+
+    document.getElementById('graphUndoBtn').addEventListener('click', undoGraphStroke);
+    document.getElementById('graphClearBtn').addEventListener('click', resetGraphCanvas);
+    document.getElementById('graphReplayBtn').addEventListener('click', replayGraphDrawing);
+    document.getElementById('saveJourneyBtn').addEventListener('click', () => {
+      persistGraphSnapshot();
+      nextScene();
+    });
+
+    resizeGraphCanvas();
+    updateGraphUIState();
+  }
+
+  // ---------------------------------------------------------------------
   // Summary / ending
   // ---------------------------------------------------------------------
 
@@ -364,11 +698,9 @@
     const summaryEl = document.getElementById('summary');
     summaryEl.innerHTML = '';
 
-    // Emotion + sentence are combined into one card.
-    const emotionValue = [answers.doorEmoji, answers.doorSentence].filter(Boolean).join('  —  ');
-    summaryEl.appendChild(buildSummaryItem('ความรู้สึกหน้าประตูบ้าน', emotionValue));
+    summaryEl.appendChild(buildGraphSummaryItem());
 
-    FIELDS.filter((f) => f.key !== 'doorEmoji' && f.key !== 'doorSentence').forEach((f) => {
+    FIELDS.forEach((f) => {
       summaryEl.appendChild(buildSummaryItem(f.label, answers[f.key]));
     });
   }
@@ -449,8 +781,8 @@
     saveAnswers();
 
     document.querySelectorAll('[data-field]').forEach((el) => { el.value = ''; });
-    document.querySelectorAll('.emoji-btn.selected').forEach((el) => el.classList.remove('selected'));
     document.getElementById('copyFeedback').textContent = '';
+    resetGraphCanvas();
 
     goToScene(0);
   }
@@ -668,7 +1000,7 @@
     buildFootsteps();
     restoreFieldValues();
     bindFieldAutosave();
-    bindEmojiPicker();
+    bindSprintGraph();
     bindNavButtons();
     bindKeyboardNav();
     bindSubmitButton();
