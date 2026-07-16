@@ -391,61 +391,6 @@
   }
 
   // ---------------------------------------------------------------------
-  // Export: Markdown + JSON
-  // ---------------------------------------------------------------------
-
-  function buildMarkdown() {
-    const date = new Date().toLocaleDateString('th-TH-u-ca-gregory', { year: 'numeric', month: 'long', day: 'numeric' });
-    const lines = [
-      '# เดินเล่นในใจตัวเอง',
-      `_บันทึกการเดินทางในใจ — ${date}_`,
-      '',
-      `## ความรู้สึกหน้าประตูบ้าน`,
-      [answers.doorEmoji, answers.doorSentence].filter(Boolean).join(' — ') || '_ครั้งนี้ขอเงียบไว้ก่อนนะ_',
-      '',
-    ];
-
-    FIELDS.filter((f) => f.key !== 'doorEmoji' && f.key !== 'doorSentence').forEach((f) => {
-      lines.push(`## ${f.label}`);
-      lines.push(answers[f.key] && answers[f.key].trim() ? answers[f.key] : '_ครั้งนี้ขอเงียบไว้ก่อนนะ_');
-      lines.push('');
-    });
-
-    return lines.join('\n');
-  }
-
-  function buildJson() {
-    return JSON.stringify(
-      {
-        title: 'เดินเล่นในใจตัวเอง',
-        exportedAt: new Date().toISOString(),
-        answers,
-      },
-      null,
-      2
-    );
-  }
-
-  function bindExportButtons() {
-    document.getElementById('copyMarkdownBtn').addEventListener('click', async () => {
-      const md = buildMarkdown();
-      try {
-        await navigator.clipboard.writeText(md);
-        showCopyFeedback('คัดลอกเป็น Markdown แล้ว');
-      } catch (err) {
-        // Clipboard API can fail without a secure context/permission — fall back to a download.
-        downloadFile('reflection.md', md, 'text/markdown');
-        showCopyFeedback('คัดลอกไม่ได้ เลยดาวน์โหลดไฟล์ให้แทน');
-      }
-    });
-
-    document.getElementById('downloadJsonBtn').addEventListener('click', () => {
-      downloadFile('reflection.json', buildJson(), 'application/json');
-      showCopyFeedback('ดาวน์โหลดเป็น JSON แล้ว');
-    });
-  }
-
-  // ---------------------------------------------------------------------
   // Anonymous submission — posts into the team's shared Google Form/Sheet.
   // No name or identifier is ever attached to the payload.
   // ---------------------------------------------------------------------
@@ -493,18 +438,6 @@
     setTimeout(() => {
       if (el.textContent === message) el.textContent = '';
     }, 2600);
-  }
-
-  function downloadFile(filename, content, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   }
 
   // ---------------------------------------------------------------------
@@ -738,7 +671,6 @@
     bindEmojiPicker();
     bindNavButtons();
     bindKeyboardNav();
-    bindExportButtons();
     bindSubmitButton();
     bindMusicToggle();
 
