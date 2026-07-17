@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — เดินเล่นในใจตัวเอง</title>
+  <meta name="description" content="สรุปคำตอบทั้งหมดจากทีม แบบไม่ระบุตัวตน" />
+  <link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body>
+  <header class="dash-header">
+    <h1>สรุปคำตอบจากทีม</h1>
+    <p class="dash-subtitle">ไม่ระบุตัวตน — รวมทุกคำตอบที่ทีมส่งเข้ามา แยกเป็นบอร์ดตามแต่ละคำถาม</p>
+    <div class="dash-meta">
+      <span id="dashCount">กำลังโหลด...</span>
+      <button type="button" id="dashRefreshBtn" class="dash-refresh-btn">↻ รีเฟรช</button>
+    </div>
+  </header>
+
+  <main id="dashContent" class="dash-content">
+    <p class="dash-status">กำลังโหลดคำตอบ...</p>
+  </main>
+
+  <script src="js/dashboard.js?v=1"></script>
+</body>
+</html>
