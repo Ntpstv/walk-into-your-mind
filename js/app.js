@@ -831,6 +831,15 @@
     document.getElementById('copyFeedback').textContent = '';
     resetGraphCanvas();
 
+    // The submit button disables itself and relabels after a successful send
+    // (to block accidental double-submits) — a fresh journey needs it back
+    // to its normal, clickable state so the next person can submit too.
+    const submitBtn = document.getElementById('submitReflectionBtn');
+    if (submitBtn && isSubmissionConfigured()) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'ส่งคำตอบให้ทีมแบบไม่ระบุตัวตน';
+    }
+
     goToScene(0);
   }
 
