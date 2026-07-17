@@ -16,18 +16,25 @@
   // below. Leave GOOGLE_FORM_ACTION_URL empty to keep the submit button
   // disabled until this is configured.
   // ---------------------------------------------------------------------
-  const GOOGLE_FORM_ACTION_URL = '';
+  const GOOGLE_FORM_ACTION_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScE7nP8upHhRqA_RR0_ZVZm5CWuJFkTUHttTGF4nkAAXjYMYA/formResponse';
   const GOOGLE_FORM_ENTRY_IDS = {
-    backpackWeight: '',
-    windowEnergy: '',
-    mirrorPride: '',
-    chairImprove: '',
-    cornerWish: '',
-    letterReminder: '',
-    lightsOutFinal: '',
+    backpackWeight: 'entry.555800095',
+    windowEnergy: 'entry.1014643297',
+    mirrorPride: 'entry.1056327519',
+    chairImprove: 'entry.1456393874',
+    cornerWish: 'entry.1529884405',
+    letterReminder: 'entry.526103210',
+    lightsOutFinal: 'entry.1733951691',
   };
   const isSubmissionConfigured = () =>
     Boolean(GOOGLE_FORM_ACTION_URL) && Object.values(GOOGLE_FORM_ENTRY_IDS).every(Boolean);
+
+  // Optional — add an 8th "paragraph" question to the Form for the sprint
+  // graph, then fill in its entry ID here. Left empty, the graph simply
+  // isn't included in the team submission (it still saves locally and
+  // exports fine). Not required for isSubmissionConfigured() since it's
+  // additive, not core to the reflection.
+  const GOOGLE_FORM_GRAPH_ENTRY_ID = '';
 
   /** Ordered list of scenes. "landing" and "ending" bookend the 8 story scenes. */
   const SCENE_ORDER = [
@@ -320,7 +327,12 @@
 
       if (e.key === 'ArrowRight' && !isTyping) {
         e.preventDefault();
-        nextScene();
+        // Route through the scene's own "next" button rather than calling nextScene()
+        // directly — some scenes (like the sprint graph) attach their own validation
+        // to that click instead of using the generic handler.
+        const activeScene = sceneEls[SCENE_ORDER[currentSceneIndex]];
+        const nextBtn = activeScene.querySelector('[data-nav="next"]');
+        if (nextBtn) nextBtn.click();
       } else if (e.key === 'ArrowLeft' && !isTyping) {
         e.preventDefault();
         prevScene();
@@ -414,26 +426,26 @@
     graphCtx.restore();
   }
 
-  /** Renders one complete stroke as a single smooth curve through its points. */
-  function drawFullStroke(pointsCss) {
+  /** Renders one complete stroke as a single smooth curve through its points, on any given context. */
+  function drawFullStroke(ctx, pointsCss) {
     if (pointsCss.length === 0) return;
     if (pointsCss.length === 1) {
-      graphCtx.beginPath();
-      graphCtx.arc(pointsCss[0].x, pointsCss[0].y, GRAPH_STROKE_WIDTH / 2, 0, Math.PI * 2);
-      graphCtx.fillStyle = GRAPH_STROKE_COLOR;
-      graphCtx.fill();
+      ctx.beginPath();
+      ctx.arc(pointsCss[0].x, pointsCss[0].y, GRAPH_STROKE_WIDTH / 2, 0, Math.PI * 2);
+      ctx.fillStyle = GRAPH_STROKE_COLOR;
+      ctx.fill();
       return;
     }
 
-    graphCtx.beginPath();
-    graphCtx.moveTo(pointsCss[0].x, pointsCss[0].y);
+    ctx.beginPath();
+    ctx.moveTo(pointsCss[0].x, pointsCss[0].y);
     for (let i = 1; i < pointsCss.length - 1; i += 1) {
       const midX = (pointsCss[i].x + pointsCss[i + 1].x) / 2;
       const midY = (pointsCss[i].y + pointsCss[i + 1].y) / 2;
-      graphCtx.quadraticCurveTo(pointsCss[i].x, pointsCss[i].y, midX, midY);
+      ctx.quadraticCurveTo(pointsCss[i].x, pointsCss[i].y, midX, midY);
     }
-    graphCtx.lineTo(pointsCss[pointsCss.length - 1].x, pointsCss[pointsCss.length - 1].y);
-    graphCtx.stroke();
+    ctx.lineTo(pointsCss[pointsCss.length - 1].x, pointsCss[pointsCss.length - 1].y);
+    ctx.stroke();
   }
 
   /** Draws just the newest segment of the stroke currently being drawn, for a live feel. */
@@ -465,7 +477,7 @@
   function redrawAllGraphStrokes() {
     drawGraphGrid();
     applyGraphStrokeStyle();
-    graphStrokes.forEach((stroke) => drawFullStroke(denormalizeStroke(stroke)));
+    graphStrokes.forEach((stroke) => drawFullStroke(graphCtx, denormalizeStroke(stroke)));
   }
 
   function resizeGraphCanvas() {
@@ -486,8 +498,46 @@
     const hasStrokes = graphStrokes.length > 0;
     const message = document.getElementById('graphFinishMessage');
     const replayBtn = document.getElementById('graphReplayBtn');
-    if (message) message.hidden = !hasStrokes;
+    if (message) {
+      message.textContent = 'ทุกเส้นที่คุณวาด คือเรื่องราวที่คุณผ่านมา';
+      message.classList.remove('graph-hint-warning');
+      message.hidden = !hasStrokes;
+    }
     if (replayBtn) replayBtn.hidden = !hasStrokes;
+  }
+
+  /** Gently prompts drawing first, instead of silently letting Continue skip past an empty canvas. */
+  function showGraphNeedsDrawingHint() {
+    const message = document.getElementById('graphFinishMessage');
+    if (!message) return;
+    message.textContent = 'ลองวาดเส้นทางของคุณก่อนนะ ค่อยบันทึกแล้วไปต่อ';
+    message.classList.add('graph-hint-warning');
+    message.hidden = false;
+  }
+
+  function isGraphLocked() {
+    return Boolean(answers.sprintGraphLocked);
+  }
+
+  /** Once saved, the drawing becomes read-only — a one-time commitment rather than an editable form field. */
+  function applyGraphLockUI() {
+    const locked = isGraphLocked();
+    if (graphCanvas) {
+      graphCanvas.style.pointerEvents = locked ? 'none' : '';
+      graphCanvas.classList.toggle('locked', locked);
+    }
+    const undoBtn = document.getElementById('graphUndoBtn');
+    const clearBtn = document.getElementById('graphClearBtn');
+    const saveBtn = document.getElementById('saveJourneyBtn');
+    if (undoBtn) undoBtn.disabled = locked;
+    if (clearBtn) clearBtn.disabled = locked;
+    if (saveBtn) saveBtn.textContent = locked ? 'ไปต่อ' : 'บันทึกเส้นทาง';
+  }
+
+  function lockGraphCanvas() {
+    answers.sprintGraphLocked = true;
+    saveAnswers();
+    applyGraphLockUI();
   }
 
   function persistGraphSnapshot() {
@@ -542,6 +592,7 @@
     if (graphCtx) redrawAllGraphStrokes();
     persistGraphSnapshot();
     updateGraphUIState();
+    applyGraphLockUI(); // re-enables drawing if this reset came from restarting the whole journey
   }
 
   /** Replays the saved strokes by re-drawing their points progressively — no video, just the same data. */
@@ -567,7 +618,7 @@
 
       drawGraphGrid();
       applyGraphStrokeStyle();
-      drawnByStroke.forEach((pts) => drawFullStroke(pts));
+      drawnByStroke.forEach((pts) => drawFullStroke(graphCtx, pts));
 
       if (i < steps.length) {
         requestAnimationFrame(frame);
@@ -576,6 +627,31 @@
       }
     }
     requestAnimationFrame(frame);
+  }
+
+  // A small offscreen render used only for the Google Form submission — a
+  // Form text field has a practical size limit, and the full-resolution,
+  // high-DPI canvas easily produces a 100KB+ base64 string. This trades
+  // fidelity for something that reliably fits in a single answer.
+  function buildGraphThumbnailDataUrl() {
+    if (graphStrokes.length === 0) return '';
+    const THUMB_W = 320;
+    const THUMB_H = 120;
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = THUMB_W;
+    thumbCanvas.height = THUMB_H;
+    const ctx = thumbCanvas.getContext('2d');
+    ctx.fillStyle = '#14192b';
+    ctx.fillRect(0, 0, THUMB_W, THUMB_H);
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = GRAPH_STROKE_COLOR;
+    graphStrokes.forEach((stroke) => {
+      const pts = stroke.map((p) => ({ x: p.x * THUMB_W, y: p.y * THUMB_H }));
+      drawFullStroke(ctx, pts);
+    });
+    return thumbCanvas.toDataURL('image/png');
   }
 
   function triggerDownload(href, filename) {
@@ -682,12 +758,23 @@
     document.getElementById('graphClearBtn').addEventListener('click', resetGraphCanvas);
     document.getElementById('graphReplayBtn').addEventListener('click', replayGraphDrawing);
     document.getElementById('saveJourneyBtn').addEventListener('click', () => {
+      if (isGraphLocked()) {
+        // Already saved on an earlier visit to this scene — nothing left to save, just continue.
+        nextScene();
+        return;
+      }
+      if (graphStrokes.length === 0) {
+        showGraphNeedsDrawingHint();
+        return;
+      }
       persistGraphSnapshot();
+      lockGraphCanvas();
       nextScene();
     });
 
     resizeGraphCanvas();
     updateGraphUIState();
+    applyGraphLockUI();
   }
 
   // ---------------------------------------------------------------------
@@ -732,6 +819,9 @@
     Object.entries(GOOGLE_FORM_ENTRY_IDS).forEach(([key, entryId]) => {
       formData.append(entryId, answers[key] || '');
     });
+    if (GOOGLE_FORM_GRAPH_ENTRY_ID) {
+      formData.append(GOOGLE_FORM_GRAPH_ENTRY_ID, answers.sprintGraphImage ? buildGraphThumbnailDataUrl() : '');
+    }
     // Google Forms' response endpoint doesn't return CORS headers, so the
     // response is opaque with mode: 'no-cors' — this is the standard way to
     // post a form cross-origin from client-side JS. We can only detect

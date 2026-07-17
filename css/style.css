@@ -413,6 +413,11 @@ h1, h2, h3 {
   touch-action: none; /* keep touch drags from scrolling the page while drawing */
 }
 
+.graph-canvas.locked {
+  cursor: default;
+  opacity: 0.85;
+}
+
 .graph-x-labels {
   display: flex;
   justify-content: space-between;
@@ -446,6 +451,18 @@ h1, h2, h3 {
   color: var(--text-primary);
 }
 
+.btn-chip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-chip:disabled:hover {
+  transform: none;
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+}
+
 .graph-finish-message {
   font-style: italic;
   font-size: 0.9rem;
@@ -455,9 +472,19 @@ h1, h2, h3 {
   animation: fadeInGentle 0.8s var(--ease-gentle);
 }
 
+.graph-finish-message.graph-hint-warning {
+  color: var(--accent-soft);
+  animation: gentlePulse 1.4s ease-in-out infinite;
+}
+
 @keyframes fadeInGentle {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gentlePulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 
 @media (max-width: 640px) {
