@@ -1,13 +1,11 @@
 /**
  * A Walk Through Your Mind — app logic
  * Single-page, story-driven sprint retrospective. No frameworks, no backend.
- * Everything lives in localStorage under STORAGE_KEY.
+ * Answers live only in memory for the current page load — a fresh visit
+ * or reload always starts blank, on purpose.
  */
 (() => {
   'use strict';
-
-  const STORAGE_KEY = 'walkThroughYourMind.answers.v1';
-  const SCENE_STORAGE_KEY = 'walkThroughYourMind.currentScene.v1';
 
   // ---------------------------------------------------------------------
   // Anonymous submission — Google Form config
@@ -67,38 +65,10 @@
     'You’re allowed to be proud of yourself before you’re perfect.',
   ];
 
-  /** In-memory state, mirrored to localStorage on every change. */
-  let answers = loadAnswers();
+  /** In-memory only — never persisted, so every page load starts blank. */
+  let answers = {};
   let currentSceneIndex = 0;
   let typingTimer = null;
-
-  // ---------------------------------------------------------------------
-  // Persistence
-  // ---------------------------------------------------------------------
-
-  function loadAnswers() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch (err) {
-      return {};
-    }
-  }
-
-  function saveAnswers() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(answers));
-    } catch (err) {
-      // Storage may be unavailable (private browsing quota etc.) — fail silently,
-      // the reflection still works for the current session.
-    }
-  }
-
-  function saveSceneIndex() {
-    try {
-      localStorage.setItem(SCENE_STORAGE_KEY, String(currentSceneIndex));
-    } catch (err) { /* noop */ }
-  }
 
   // ---------------------------------------------------------------------
   // Scene navigation
@@ -127,7 +97,6 @@
     isTransitioning = true;
     sceneEls[prevName].classList.remove('active');
     currentSceneIndex = index;
-    saveSceneIndex();
 
     const render = () => {
       sceneEls[nextName].classList.add('active');
@@ -276,23 +245,14 @@
   }
 
   // ---------------------------------------------------------------------
-  // Field binding + autosave
+  // Field binding — keeps the in-memory answers object in sync with the
+  // DOM as the user types. Nothing here persists across a reload.
   // ---------------------------------------------------------------------
 
-  function restoreFieldValues() {
-    FIELDS.forEach(({ key }) => {
-      const value = answers[key];
-      if (!value) return;
-      const el = document.querySelector(`[data-field="${key}"]`);
-      if (el) el.value = value;
-    });
-  }
-
-  function bindFieldAutosave() {
+  function bindFieldSync() {
     document.querySelectorAll('[data-field]').forEach((el) => {
       el.addEventListener('input', () => {
         answers[el.dataset.field] = el.value;
-        saveAnswers();
       });
     });
   }
@@ -536,7 +496,6 @@
 
   function lockGraphCanvas() {
     answers.sprintGraphLocked = true;
-    saveAnswers();
     applyGraphLockUI();
   }
 
@@ -548,7 +507,6 @@
       answers.sprintGraphPoints = graphStrokes;
       answers.sprintGraphImage = graphCanvas.toDataURL('image/png');
     }
-    saveAnswers();
   }
 
   function onGraphPointerDown(e) {
@@ -868,7 +826,6 @@
 
   function restartJourney() {
     answers = {};
-    saveAnswers();
 
     document.querySelectorAll('[data-field]').forEach((el) => { el.value = ''; });
     document.getElementById('copyFeedback').textContent = '';
@@ -1086,10 +1043,18 @@
   // ---------------------------------------------------------------------
 
   function init() {
+    // Clean up any answers a previous version of this app left in
+    // localStorage — reloads are meant to always start blank now, and
+    // that stored data (which can include a base64 image) would otherwise
+    // just sit there unused indefinitely.
+    try {
+      localStorage.removeItem('walkThroughYourMind.answers.v1');
+      localStorage.removeItem('walkThroughYourMind.currentScene.v1');
+    } catch (err) { /* noop */ }
+
     buildParticles();
     buildFootsteps();
-    restoreFieldValues();
-    bindFieldAutosave();
+    bindFieldSync();
     bindSprintGraph();
     bindNavButtons();
     bindKeyboardNav();
