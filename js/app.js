@@ -34,7 +34,7 @@
   // isn't included in the team submission (it still saves locally and
   // exports fine). Not required for isSubmissionConfigured() since it's
   // additive, not core to the reflection.
-  const GOOGLE_FORM_GRAPH_ENTRY_ID = '';
+  const GOOGLE_FORM_GRAPH_ENTRY_ID = 'entry.1563941710';
 
   /** Ordered list of scenes. "landing" and "ending" bookend the 8 story scenes. */
   const SCENE_ORDER = [
