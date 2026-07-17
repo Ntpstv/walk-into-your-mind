@@ -8,7 +8,7 @@
 
   // Fill in after: Google Sheet > File > Share > Publish to web > select the
   // responses tab > CSV format > Publish > copy the resulting URL here.
-  const SHEET_CSV_URL = '';
+  const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSUv1AI7iR6jZn1gFoatSsfcSXCteWT3FLwPXPHIt1fva_tssOCn7r1qHYfzkbey3ndV9T_i-xT9SC4/pub?gid=988729758&single=true&output=csv';
 
   const SKIP_HEADERS = ['Timestamp', 'Email Address'];
   const GRAPH_DATA_URL_PREFIX = 'data:image/png;base64,';

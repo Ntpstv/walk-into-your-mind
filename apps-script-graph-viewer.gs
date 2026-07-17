@@ -1,13 +1,18 @@
 /**
  * Converts the sprint-graph base64 image stored in each form response into
- * a real file in Google Drive, then replaces the cell with a one-click
- * "🖼️ ดูรูป" link to that file. Finds the graph column by its content
+ * a real file in Google Drive, then adds a one-click "🖼️ ดูรูป" link to
+ * that file in a dedicated column. Finds the graph column by its content
  * (a data:image/png;base64,... prefix) rather than by header text, so it
  * keeps working even if the question is renamed or reordered.
+ *
+ * Important: the link goes into a SEPARATE column, not over the original
+ * cell — the team dashboard (dashboard.html) reads that raw base64 value
+ * directly, so it must stay intact.
  */
 
 const GRAPH_DATA_URL_PREFIX = 'data:image/png;base64,';
 const DRIVE_FOLDER_NAME = 'Sprint Graph Images';
+const LINK_COLUMN_HEADER = 'ดูรูป (ลิงก์)';
 
 /** Runs automatically on every new form submission (needs the trigger set up below). */
 function onFormSubmit(e) {
@@ -28,7 +33,7 @@ function onFormSubmit(e) {
   const colIndex = headerRow.indexOf(graphQuestionTitle) + 1;
   if (colIndex === 0) return;
 
-  convertCellToImageLink_(sheet, e.range.getRow(), colIndex);
+  addImageLink_(sheet, e.range.getRow(), colIndex);
 }
 
 /** One-time manual cleanup for rows submitted before this script existed. Run this by hand once. */
@@ -56,13 +61,13 @@ function backfillExistingRows() {
   for (let r = 1; r < data.length; r += 1) {
     const value = data[r][colIndex - 1];
     if (typeof value === 'string' && value.indexOf(GRAPH_DATA_URL_PREFIX) === 0) {
-      convertCellToImageLink_(sheet, r + 1, colIndex);
+      addImageLink_(sheet, r + 1, colIndex);
     }
   }
 }
 
-function convertCellToImageLink_(sheet, row, col) {
-  const cell = sheet.getRange(row, col);
+function addImageLink_(sheet, row, graphCol) {
+  const cell = sheet.getRange(row, graphCol);
   const dataUrl = cell.getValue();
   if (typeof dataUrl !== 'string' || dataUrl.indexOf(GRAPH_DATA_URL_PREFIX) !== 0) return;
 
@@ -74,7 +79,19 @@ function convertCellToImageLink_(sheet, row, col) {
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
   const viewUrl = `https://drive.google.com/file/d/${file.getId()}/view`;
-  cell.setFormula(`=HYPERLINK("${viewUrl}", "🖼️ ดูรูป")`);
+  const linkCol = getOrCreateLinkColumn_(sheet);
+  sheet.getRange(row, linkCol).setFormula(`=HYPERLINK("${viewUrl}", "🖼️ ดูรูป")`);
+}
+
+function getOrCreateLinkColumn_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  const header = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const existingIndex = header.indexOf(LINK_COLUMN_HEADER);
+  if (existingIndex !== -1) return existingIndex + 1;
+
+  const newCol = lastCol + 1;
+  sheet.getRange(1, newCol).setValue(LINK_COLUMN_HEADER);
+  return newCol;
 }
 
 function getOrCreateFolder_(name) {
